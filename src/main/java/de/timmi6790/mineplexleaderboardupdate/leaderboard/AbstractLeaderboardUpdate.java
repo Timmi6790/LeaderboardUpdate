@@ -62,6 +62,7 @@ public abstract class AbstractLeaderboardUpdate<T extends LeaderboardData, D ext
                 countDownLatch.await(1, TimeUnit.HOURS);
             } catch (final InterruptedException ignore) {
             }
+
         }, 0, 5, TimeUnit.MINUTES);
     }
 

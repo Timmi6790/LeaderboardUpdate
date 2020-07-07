@@ -10,7 +10,6 @@ import org.jdbi.v3.core.statement.PreparedBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.invoke.MethodHandles;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,31 +19,31 @@ public class LeaderboardUpdateBedrock extends AbstractLeaderboardUpdate<Leaderbo
     private static final Pattern HTML_ROW_PARSER = Pattern.compile("<tr>|<tr >|<tr class=\"LeaderboardsOdd\">|<tr class=\"LeaderboardsHead\">[^<]*");
     private static final Pattern LEADERBOARD_PATTERN = Pattern.compile("^<td>\\d*<\\/td><td>(.{1,33})<\\/td><td> ([\\d,]*)<\\/td>");
 
-    private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getSimpleName());
+    private static final Logger logger = LoggerFactory.getLogger(LeaderboardUpdateBedrock.class);
 
-    private static final String UPDATE_LAST_UPDATE = "UPDATE BedrockLeaderboards SET last_update = CURRENT_TIMESTAMP WHERE id = :leaderboardId LIMIT 1;";
+    private static final String UPDATE_LAST_UPDATE = "UPDATE bedrock_leaderboard SET last_update = CURRENT_TIMESTAMP WHERE id = :leaderboardId LIMIT 1;";
 
     private static final String GET_UPDATE_BOARDS = "SELECT board.id, board.website_name game_name " +
-            "FROM BedrockLeaderboards board " +
+            "FROM bedrock_leaderboard board " +
             "WHERE TIMESTAMPDIFF(SECOND, board.last_update, CURRENT_TIMESTAMP) >= 1800 " +
             "AND (board.deprecated = 0 " +
-            "OR (SELECT COUNT(1) FROM BedrockLeaderboardSaveIDs WHERE leaderboard_id = board.id LIMIT 1) = 0) " +
+            "OR (SELECT COUNT(1) FROM bedrock_leaderboard_save_id WHERE leaderboard_id = board.id LIMIT 1) = 0) " +
             "ORDER BY last_update;";
 
-    private static final String GET_PLAYERS_BY_NAME = "SELECT player.`name` player\n" +
-            "FROM BedrockPlayers player\n" +
-            "WHERE player.`name` IN (<names>);";
+    private static final String GET_PLAYERS_BY_NAME = "SELECT player.player_name player " +
+            "FROM bedrock_player player " +
+            "WHERE player.player_name IN (<names>);";
 
-    private static final String INSERT_PLAYER = "INSERT INTO BedrockPlayers(name) VALUES(:playerName);";
+    private static final String INSERT_PLAYER = "INSERT INTO bedrock_player(player_name) VALUES(:playerName);";
 
-    private static final String GET_LAST_LEADERBOARD = "SELECT player.`name`, save.score " +
-            "FROM BedrockLeaderboardSaveIDs saveId " +
-            "INNER JOIN BedrockLeaderboardSaves save ON save.leaderboard_save_id = saveId.id " +
-            "INNER JOIN BedrockPlayers player ON player.id = save.player_id " +
-            "WHERE saveId.id =(SELECT id FROM BedrockLeaderboardSaveIDs WHERE leaderboard_id = :leaderboardId ORDER BY id DESC LIMIT 1);";
+    private static final String GET_LAST_LEADERBOARD = "SELECT player.player_name, save.score " +
+            "FROM bedrock_leaderboard_save_id saveId " +
+            "INNER JOIN bedrock_leaderboard_save save ON save.leaderboard_save_id = saveId.id " +
+            "INNER JOIN bedrock_player player ON player.id = save.player_id " +
+            "WHERE saveId.id =(SELECT id FROM bedrock_leaderboard_save_id WHERE leaderboard_id = :leaderboardId ORDER BY id DESC LIMIT 1);";
 
-    private static final String INSERT_NEW_SAVE_ID = "INSERT INTO BedrockLeaderboardSaveIDs (leaderboard_id) VALUES (:leaderboardId);";
-    private static final String INSERT_LEADERBOARD_DATA = "INSERT INTO BedrockLeaderboardSaves(leaderboard_save_id, player_id, score) VALUES (:lastInsertId, (SELECT id FROM BedrockPlayers WHERE `name` = :name LIMIT 1), :score);";
+    private static final String INSERT_NEW_SAVE_ID = "INSERT INTO bedrock_leaderboard_save_id (leaderboard_id) VALUES (:leaderboardId);";
+    private static final String INSERT_LEADERBOARD_DATA = "INSERT INTO bedrock_leaderboard_save(leaderboard_save_id, player_id, score) VALUES (:lastInsertId, (SELECT id FROM bedrock_player WHERE player_name = :playerName LIMIT 1), :score);";
 
     public LeaderboardUpdateBedrock(final String leaderboardBaseUrl, final Jdbi database) {
         super("Bedrock", leaderboardBaseUrl, database);
@@ -53,7 +52,7 @@ public class LeaderboardUpdateBedrock extends AbstractLeaderboardUpdate<Leaderbo
                 (rs, ctx) -> new LeaderboardDataBedrock(rs.getInt("id"), rs.getString("game_name"))
 
         ).registerRowMapper(LeaderboardBedrock.class,
-                (rs, ctx) -> new LeaderboardBedrock(rs.getString("name"), rs.getLong("score"))
+                (rs, ctx) -> new LeaderboardBedrock(rs.getString("player_name"), rs.getLong("score"))
         );
     }
 
@@ -79,21 +78,21 @@ public class LeaderboardUpdateBedrock extends AbstractLeaderboardUpdate<Leaderbo
         logger.info("[{}] Updating {}", this.getLeaderboardType(), leaderboardInfo.getWebsiteName());
 
         final List<LeaderboardBedrock> leaderboard = newLeaderboardOpt.get();
-        final Set<String> playerNames = leaderboard
+        final Map<String, String> playerNames = leaderboard
                 .stream()
                 .map(Leaderboard::getPlayer)
-                .collect(Collectors.toSet());
-        this.getDatabase().useHandle(handle -> {
-            final Set<String> newPlayers = handle.createQuery(GET_PLAYERS_BY_NAME)
-                    .bindList("names", playerNames)
-                    .mapTo(String.class)
-                    .stream()
-                    .filter(player -> !playerNames.contains(player))
-                    .collect(Collectors.toSet());
+                .collect(Collectors.toMap(String::toLowerCase, name -> name));
 
+        this.getDatabase().useHandle(handle -> {
             // Insert new players
             final PreparedBatch newPlayerBatch = handle.prepareBatch(INSERT_PLAYER);
-            newPlayers.forEach(player -> {
+            handle.createQuery(GET_PLAYERS_BY_NAME)
+                    .bindList("names", playerNames.values())
+                    .mapTo(String.class)
+                    .stream()
+                    .forEach(knownName -> playerNames.remove(knownName.toLowerCase()));
+
+            playerNames.values().forEach(player -> {
                 logger.debug("[{}] New player {}", this.getLeaderboardType(), player);
                 newPlayerBatch.bind("playerName", player);
                 newPlayerBatch.add();
@@ -112,7 +111,7 @@ public class LeaderboardUpdateBedrock extends AbstractLeaderboardUpdate<Leaderbo
             final PreparedBatch leaderboardDataInsert = handle.prepareBatch(INSERT_LEADERBOARD_DATA);
             leaderboard.forEach(row -> {
                 leaderboardDataInsert.bind("lastInsertId", insertId);
-                leaderboardDataInsert.bind("name", row.getPlayer());
+                leaderboardDataInsert.bind("playerName", row.getPlayer());
                 leaderboardDataInsert.bind("score", row.getScore());
                 leaderboardDataInsert.add();
             });

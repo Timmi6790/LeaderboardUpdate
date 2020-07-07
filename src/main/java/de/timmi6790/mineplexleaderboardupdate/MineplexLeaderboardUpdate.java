@@ -13,7 +13,7 @@ import org.jdbi.v3.core.Jdbi;
 import java.io.File;
 
 public class MineplexLeaderboardUpdate {
-    private static final String BOT_VERSION = "3.0.1";
+    private static final String BOT_VERSION = "3.0.2";
 
     @Getter
     private static SentryClient sentry;
