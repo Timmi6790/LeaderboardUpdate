@@ -1,5 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate;
 
+import de.timmi6790.mineplexleaderboardupdate.leaderboard.cleanup.LeaderboardCleanup;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.bedrock.LeaderboardUpdateBedrock;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java.LeaderboardUpdateJava;
 import io.sentry.SentryClient;
@@ -11,6 +12,7 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.jdbi.v3.core.Jdbi;
 
 import java.io.File;
+import java.util.concurrent.Executors;
 
 public class MineplexLeaderboardUpdate {
     private static final String BOT_VERSION = "3.0.2";
@@ -30,5 +32,8 @@ public class MineplexLeaderboardUpdate {
         final Jdbi database = Jdbi.create(config.getString("db.url"), config.getString("db.name"), config.getString("db.password"));
         new LeaderboardUpdateJava(config.getString("mp.javaUrl"), database).start();
         new LeaderboardUpdateBedrock(config.getString("mp.bedrockUrl"), database).start();
+
+        // Cleanup
+        Executors.newSingleThreadExecutor().submit(() -> new LeaderboardCleanup(database).startCleanup());
     }
 }
