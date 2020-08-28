@@ -5,7 +5,6 @@ import lombok.NonNull;
 
 @Data
 public abstract class LeaderboardData {
-    @NonNull
     private final int databaseId;
     @NonNull
     private final String websiteName;

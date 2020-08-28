@@ -3,16 +3,17 @@ package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 import de.timmi6790.mineplexleaderboardupdate.MapBuilder;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.AbstractLeaderboardUpdate;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.LeaderboardData;
-import de.timmi6790.mineplexleaderboardupdate.utilities.UUUIDUtilities;
 import kong.unirest.HttpResponse;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.PreparedBatch;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.tinylog.Logger;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -23,8 +24,6 @@ public class LeaderboardUpdateJava extends AbstractLeaderboardUpdate<Leaderboard
     private static final Pattern HTML_ROW_PARSER = Pattern.compile("<tr>|<tr class=\"LeaderboardsOdd\">|<tr class=\"LeaderboardsHead\">[^<]*");
     private static final Pattern LEADERBOARD_PATTERN = Pattern.compile("^<td>\\d*<\\/td><td><img src=\"https:\\/\\/crafatar\\.com\\/avatars\\/(.*)\\?size=\\d*" +
             "&overlay\"><\\/td><td><a href=\"\\/players\\/\\w{1,16}\">(\\w{1,16})<\\/td><td> ([\\d|,]*)<\\/td><\\/td>");
-
-    private static final Logger logger = LoggerFactory.getLogger(LeaderboardUpdateJava.class);
 
     private static final String GET_UPDATE_BOARDS = "SELECT board.id, game.website_name, stat.website_name stat_name, boards.board_name " +
             "FROM java_leaderboard board " +
@@ -56,15 +55,10 @@ public class LeaderboardUpdateJava extends AbstractLeaderboardUpdate<Leaderboard
     public LeaderboardUpdateJava(final String leaderboardBaseUrl, final Jdbi database) {
         super("Java", leaderboardBaseUrl, database);
 
-        this.getDatabase().registerRowMapper(LeaderboardDataJava.class,
-                (rs, ctx) -> new LeaderboardDataJava(rs.getInt("id"), rs.getString("website_name"), rs.getString("stat_name"), rs.getString("board_name"))
-
-        ).registerRowMapper(LeaderboardJava.class,
-                (rs, ctx) -> new LeaderboardJava(rs.getString("player_name"), UUUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")), rs.getLong("score"))
-
-        ).registerRowMapper(LeaderboardPlayerJava.class,
-                (rs, ctx) -> new LeaderboardPlayerJava(UUUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")), rs.getString("player"))
-        );
+        this.getDatabase()
+                .registerRowMapper(LeaderboardDataJava.class, new LeaderboardDataJava.DatabaseMapper())
+                .registerRowMapper(LeaderboardJava.class, new LeaderboardJava.DatabaseMapper())
+                .registerRowMapper(LeaderboardPlayerJava.class, new LeaderboardPlayerJava.DatabaseMapper());
     }
 
     @Override
@@ -76,79 +70,77 @@ public class LeaderboardUpdateJava extends AbstractLeaderboardUpdate<Leaderboard
         );
 
         final LeaderboardDataJava leaderboardInfoJava = (LeaderboardDataJava) leaderboardInfo;
-        final Optional<List<LeaderboardJava>> newLeaderboardOpt = this.getNewWebLeaderboard(
-                new MapBuilder<String, Object>(() -> new HashMap<>(3))
+        this.getNewWebLeaderboard(
+                MapBuilder.<String, Object>ofHashMap(3)
                         .put("game", leaderboardInfoJava.getWebsiteName())
                         .put("type", leaderboardInfoJava.getStat())
                         .put("boardType", leaderboardInfoJava.getBoard())
                         .build(),
                 leaderboardInfoJava
-        );
+        ).ifPresent(leaderboard -> {
+            Logger.info("[{}] Updating {} {} {} {}", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(), leaderboardInfoJava.getStat(),
+                    leaderboardInfoJava.getBoard(), leaderboardInfoJava.getDatabaseId());
 
-        if (!newLeaderboardOpt.isPresent()) {
-            return;
-        }
+            this.getDatabase().useHandle(handle -> {
+                final Map<UUID, String> playersInDb = handle.createQuery(GET_PLAYERS_BY_UUID)
+                        .bindList("uuids", leaderboard.stream().map(LeaderboardJava::getPlayerUUIDBytes).collect(Collectors.toList()))
+                        .mapTo(LeaderboardPlayerJava.class)
+                        .collect(Collectors.toMap(LeaderboardPlayerJava::getUuid, LeaderboardPlayerJava::getName));
 
-        logger.info("[{}] Updating {} {} {} {}", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(), leaderboardInfoJava.getStat(),
-                leaderboardInfoJava.getBoard(), leaderboardInfoJava.getDatabaseId());
+                // Check for new players or player name change
+                final PreparedBatch playerUpdateNameBatch = handle.prepareBatch(UPDATE_PLAYER_NAME);
+                final PreparedBatch newPlayerBatch = handle.prepareBatch(INSERT_PLAYER);
+                for (final LeaderboardJava leaderboardEntry : leaderboard) {
+                    final String playerName = playersInDb.get(leaderboardEntry.getPlayerUUID());
+                    if (playerName == null) {
+                        Logger.debug("[{}] {}-{}-{} New player entry {} \"{}\"", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(),
+                                leaderboardInfoJava.getStat(), leaderboardInfoJava.getBoard(), leaderboardEntry.getPlayerUUID(), leaderboardEntry.getPlayer());
 
-        final List<LeaderboardJava> leaderboard = newLeaderboardOpt.get();
-        final List<byte[]> playerUUIDs = leaderboard.parallelStream()
-                .unordered()
-                .map(LeaderboardJava::getPlayerUUIDBytes)
-                .collect(Collectors.toList());
-        this.getDatabase().useHandle(handle -> {
-            final Map<UUID, String> playersInDb = handle.createQuery(GET_PLAYERS_BY_UUID)
-                    .bindList("uuids", playerUUIDs)
-                    .mapTo(LeaderboardPlayerJava.class)
-                    .stream()
-                    .parallel()
-                    .unordered()
-                    .collect(Collectors.toConcurrentMap(LeaderboardPlayerJava::getUuid, LeaderboardPlayerJava::getName));
+                        newPlayerBatch.add(
+                                MapBuilder.<String, Object>ofHashMap(2)
+                                        .put("playerName", leaderboardEntry.getPlayer())
+                                        .put("uuid", leaderboardEntry.getPlayerUUIDBytes())
+                                        .build()
+                        );
 
-            // Check for new players or player name change
-            final PreparedBatch playerUpdateNameBatch = handle.prepareBatch(UPDATE_PLAYER_NAME);
-            final PreparedBatch newPlayerBatch = handle.prepareBatch(INSERT_PLAYER);
-            leaderboard.forEach(row -> {
-                final Optional<String> playerName = Optional.ofNullable(playersInDb.get(row.getPlayerUUID()));
-                if (!playerName.isPresent()) {
-                    logger.debug("[{}] {}-{}-{} New player entry {} \"{}\"", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(),
-                            leaderboardInfoJava.getStat(), leaderboardInfoJava.getBoard(), row.getPlayerUUID(), row.getPlayer());
+                    } else if (!playerName.equals(leaderboardEntry.getPlayer())) {
+                        Logger.debug("[{}] {} changed name from \"{}\" to \"{}\"", this.getLeaderboardType(), leaderboardEntry.getPlayerUUID(),
+                                leaderboardEntry.getPlayer(), playerName);
 
-                    newPlayerBatch.bind("playerName", row.getPlayer());
-                    newPlayerBatch.bind("uuid", row.getPlayerUUIDBytes());
-                    newPlayerBatch.add();
-
-                } else if (!playerName.get().equals(row.getPlayer())) {
-                    logger.debug("[{}] {} changed name from \"{}\" to \"{}\"", this.getLeaderboardType(), row.getPlayerUUID(), row.getPlayer(), playerName.get());
-
-                    playerUpdateNameBatch.bind("playerName", row.getPlayer());
-                    playerUpdateNameBatch.bind("uuid", row.getPlayerUUIDBytes());
-                    playerUpdateNameBatch.add();
+                        playerUpdateNameBatch.add(
+                                MapBuilder.<String, Object>ofHashMap(2)
+                                        .put("playerName", leaderboardEntry.getPlayer())
+                                        .put("uuid", leaderboardEntry.getPlayerUUIDBytes())
+                                        .build()
+                        );
+                    }
                 }
+                playerUpdateNameBatch.execute();
+                newPlayerBatch.execute();
+
+                // Insert new leaderboard save point
+                final long insertId = handle.createUpdate(INSERT_NEW_SAVE)
+                        .bind("leaderboardId", leaderboardInfoJava.getDatabaseId())
+                        .executeAndReturnGeneratedKeys()
+                        .mapTo(long.class)
+                        .first();
+
+                Logger.info("[{}] Insert new {}-{}-{} with {}", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(), leaderboardInfoJava.getStat(),
+                        leaderboardInfoJava.getBoard(), insertId);
+
+                // Insert new leaderboard data
+                final PreparedBatch leaderboardInsert = handle.prepareBatch(INSERT_LEADERBOARD_DATA);
+                for (final LeaderboardJava leaderboardEntry : leaderboard) {
+                    leaderboardInsert.add(
+                            MapBuilder.<String, Object>ofHashMap(3)
+                                    .put("lastInsertId", insertId)
+                                    .put("uuid", leaderboardEntry.getPlayerUUIDBytes())
+                                    .put("score", leaderboardEntry.getScore())
+                                    .build()
+                    );
+                }
+                leaderboardInsert.execute();
             });
-            playerUpdateNameBatch.execute();
-            newPlayerBatch.execute();
-
-            // Insert new leaderboard save point
-            final long insertId = handle.createUpdate(INSERT_NEW_SAVE)
-                    .bind("leaderboardId", leaderboardInfoJava.getDatabaseId())
-                    .executeAndReturnGeneratedKeys()
-                    .mapTo(long.class)
-                    .first();
-
-            logger.info("[{}] Insert new {}-{}-{} with {}", this.getLeaderboardType(), leaderboardInfoJava.getWebsiteName(), leaderboardInfoJava.getStat(),
-                    leaderboardInfoJava.getBoard(), insertId);
-
-            // Insert new leaderboard data
-            final PreparedBatch leaderboardInsert = handle.prepareBatch(INSERT_LEADERBOARD_DATA);
-            leaderboard.forEach(row -> {
-                leaderboardInsert.bind("lastInsertId", insertId);
-                leaderboardInsert.bind("uuid", row.getPlayerUUIDBytes());
-                leaderboardInsert.bind("score", row.getScore());
-                leaderboardInsert.add();
-            });
-            leaderboardInsert.execute();
         });
     }
 
@@ -162,7 +154,7 @@ public class LeaderboardUpdateJava extends AbstractLeaderboardUpdate<Leaderboard
     }
 
     @Override
-    protected List<LeaderboardJava> getLastLeaderboard(final LeaderboardData leaderboardData) {
+    protected List<LeaderboardJava> getLastSavedLeaderboard(final LeaderboardData leaderboardData) {
         return this.getDatabase().withHandle(
                 handle -> handle.createQuery(GET_LAST_LEADERBOARD)
                         .bind("leaderboardId", leaderboardData.getDatabaseId())
@@ -176,7 +168,12 @@ public class LeaderboardUpdateJava extends AbstractLeaderboardUpdate<Leaderboard
         return Arrays.stream(HTML_ROW_PARSER.split(response.getBody()))
                 .map(LEADERBOARD_PATTERN::matcher)
                 .filter(Matcher::find)
-                .map(matcher -> new LeaderboardJava(matcher.group(2), UUID.fromString(matcher.group(1)), Long.parseLong(matcher.group(3).replace(",", ""))))
+                .map(matcher -> new LeaderboardJava(
+                                matcher.group(2),
+                                UUID.fromString(matcher.group(1)),
+                                Long.parseLong(matcher.group(3).replace(",", ""))
+                        )
+                )
                 .collect(Collectors.toList());
     }
 }

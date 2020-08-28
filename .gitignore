@@ -8,3 +8,5 @@ dependency-reduced-pom.xml
 src/main/resources/Pconfig.properties
 
 src/main/resources/Dconfig.properties
+
+run/

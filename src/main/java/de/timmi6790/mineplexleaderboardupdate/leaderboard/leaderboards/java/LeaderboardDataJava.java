@@ -5,6 +5,11 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.statement.StatementContext;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 @Getter
 @EqualsAndHashCode(callSuper = true)
@@ -20,5 +25,17 @@ public class LeaderboardDataJava extends LeaderboardData {
 
         this.stat = stat;
         this.board = board;
+    }
+
+    public static class DatabaseMapper implements RowMapper<LeaderboardDataJava> {
+        @Override
+        public LeaderboardDataJava map(final ResultSet rs, final StatementContext ctx) throws SQLException {
+            return new LeaderboardDataJava(
+                    rs.getInt("id"),
+                    rs.getString("website_name"),
+                    rs.getString("stat_name"),
+                    rs.getString("board_name")
+            );
+        }
     }
 }

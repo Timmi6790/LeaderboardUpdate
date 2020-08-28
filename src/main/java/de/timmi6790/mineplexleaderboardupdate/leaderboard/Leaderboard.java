@@ -7,6 +7,5 @@ import lombok.NonNull;
 public abstract class Leaderboard {
     @NonNull
     private final String player;
-    @NonNull
     private final long score;
 }

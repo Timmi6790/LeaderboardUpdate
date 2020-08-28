@@ -1,13 +1,9 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.cleanup;
 
-import org.apache.commons.configuration2.Configuration;
-import org.apache.commons.configuration2.builder.fluent.Configurations;
-import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.PreparedBatch;
 import org.tinylog.Logger;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -28,12 +24,6 @@ public class LeaderboardCleanup {
     private static final String DELETE_ID = "DELETE FROM java_leaderboard_save_id WHERE id = :id LIMIT 1";
 
     private final Jdbi database;
-
-    public static void main(final String[] args) throws ConfigurationException {
-        final Configurations configs = new Configurations();
-        final Configuration config = configs.properties(new File("Dconfig.properties"));
-        new LeaderboardCleanup(Jdbi.create(config.getString("db.url"), config.getString("db.name"), config.getString("db.password"))).startCleanup();
-    }
 
     public LeaderboardCleanup(final Jdbi database) {
         this.database = database;

@@ -1,8 +1,13 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
+import de.timmi6790.mineplexleaderboardupdate.utilities.UUUIDUtilities;
 import lombok.Data;
 import lombok.NonNull;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.statement.StatementContext;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.UUID;
 
 @Data
@@ -11,4 +16,14 @@ public class LeaderboardPlayerJava {
     private final UUID uuid;
     @NonNull
     private final String name;
+
+    public static class DatabaseMapper implements RowMapper<LeaderboardPlayerJava> {
+        @Override
+        public LeaderboardPlayerJava map(final ResultSet rs, final StatementContext ctx) throws SQLException {
+            return new LeaderboardPlayerJava(
+                    UUUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")),
+                    rs.getString("player")
+            );
+        }
+    }
 }
