@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
-import de.timmi6790.mineplexleaderboardupdate.utilities.UUIDUtilities;
+import de.timmi6790.commons.utilities.UUIDUtilities;
 import lombok.Data;
 import lombok.NonNull;
 import org.jdbi.v3.core.mapper.RowMapper;

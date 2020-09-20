@@ -1,7 +1,7 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
+import de.timmi6790.commons.utilities.UUIDUtilities;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.Leaderboard;
-import de.timmi6790.mineplexleaderboardupdate.utilities.UUIDUtilities;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;

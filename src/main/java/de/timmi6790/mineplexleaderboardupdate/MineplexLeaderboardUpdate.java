@@ -1,9 +1,9 @@
 package de.timmi6790.mineplexleaderboardupdate;
 
+import de.timmi6790.commons.utilities.GsonUtilities;
 import de.timmi6790.mineplexleaderboardupdate.cleanup.LeaderboardCleanup;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.bedrock.LeaderboardUpdateBedrock;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java.LeaderboardUpdateJava;
-import de.timmi6790.mineplexleaderboardupdate.utilities.FileUtilities;
 import io.sentry.SentryClient;
 import io.sentry.SentryClientFactory;
 import lombok.Getter;
@@ -38,10 +38,10 @@ public class MineplexLeaderboardUpdate {
             config = new Config();
         } else {
             firstInnit = false;
-            config = FileUtilities.readJsonFile(configPath, Config.class);
+            config = GsonUtilities.readJsonFile(configPath, Config.class);
         }
 
-        FileUtilities.saveToJson(configPath, config);
+        GsonUtilities.saveToJson(configPath, config);
         if (firstInnit) {
             Logger.info("Created main config file.");
             System.exit(1);

@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.bedrock;
 
-import de.timmi6790.mineplexleaderboardupdate.MapBuilder;
+import de.timmi6790.commons.builders.MapBuilder;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.LeaderboardData;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;

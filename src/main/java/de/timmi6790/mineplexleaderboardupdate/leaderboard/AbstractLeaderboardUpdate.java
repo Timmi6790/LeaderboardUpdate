@@ -140,8 +140,9 @@ public abstract class AbstractLeaderboardUpdate<D extends LeaderboardData, L ext
             }
 
             try {
-                countDownLatch.await(1, TimeUnit.HOURS);
-            } catch (final InterruptedException ignore) {
+                countDownLatch.await();
+            } catch (final InterruptedException e) {
+                Logger.error(e);
             }
 
         }, 0, 5, TimeUnit.MINUTES);

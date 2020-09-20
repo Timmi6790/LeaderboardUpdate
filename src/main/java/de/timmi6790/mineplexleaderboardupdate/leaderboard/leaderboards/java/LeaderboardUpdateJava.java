@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
-import de.timmi6790.mineplexleaderboardupdate.MapBuilder;
+import de.timmi6790.commons.builders.MapBuilder;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.AbstractLeaderboardUpdate;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.LeaderboardData;
 import lombok.EqualsAndHashCode;

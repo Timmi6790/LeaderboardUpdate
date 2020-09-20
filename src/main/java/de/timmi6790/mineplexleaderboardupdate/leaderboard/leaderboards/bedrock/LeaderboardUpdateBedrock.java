@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.bedrock;
 
-import de.timmi6790.mineplexleaderboardupdate.MapBuilder;
+import de.timmi6790.commons.builders.MapBuilder;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.AbstractLeaderboardUpdate;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.Leaderboard;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.LeaderboardData;
