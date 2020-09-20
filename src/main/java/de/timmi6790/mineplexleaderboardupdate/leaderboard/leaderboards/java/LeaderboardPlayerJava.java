@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
-import de.timmi6790.mineplexleaderboardupdate.utilities.UUUIDUtilities;
+import de.timmi6790.mineplexleaderboardupdate.utilities.UUIDUtilities;
 import lombok.Data;
 import lombok.NonNull;
 import org.jdbi.v3.core.mapper.RowMapper;
@@ -21,7 +21,7 @@ public class LeaderboardPlayerJava {
         @Override
         public LeaderboardPlayerJava map(final ResultSet rs, final StatementContext ctx) throws SQLException {
             return new LeaderboardPlayerJava(
-                    UUUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")),
+                    UUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")),
                     rs.getString("player")
             );
         }

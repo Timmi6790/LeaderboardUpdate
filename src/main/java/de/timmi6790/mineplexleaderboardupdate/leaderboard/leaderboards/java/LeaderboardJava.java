@@ -1,7 +1,7 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.Leaderboard;
-import de.timmi6790.mineplexleaderboardupdate.utilities.UUUIDUtilities;
+import de.timmi6790.mineplexleaderboardupdate.utilities.UUIDUtilities;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
@@ -25,7 +25,7 @@ public class LeaderboardJava extends Leaderboard {
         super(player, score);
 
         this.playerUUID = playerUUID;
-        this.playerUUIDBytes = UUUIDUtilities.getBytesFromUUID(playerUUID);
+        this.playerUUIDBytes = UUIDUtilities.getBytesFromUUID(playerUUID);
     }
 
     public static class DatabaseMapper implements RowMapper<LeaderboardJava> {
@@ -33,7 +33,7 @@ public class LeaderboardJava extends Leaderboard {
         public LeaderboardJava map(final ResultSet rs, final StatementContext ctx) throws SQLException {
             return new LeaderboardJava(
                     rs.getString("player_name"),
-                    UUUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")),
+                    UUIDUtilities.getUUIDFromBytes(rs.getBytes("uuid")),
                     rs.getLong("score")
             );
         }

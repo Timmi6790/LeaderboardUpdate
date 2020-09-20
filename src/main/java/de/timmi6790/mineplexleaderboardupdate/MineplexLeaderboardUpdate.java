@@ -1,6 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate;
 
-import de.timmi6790.mineplexleaderboardupdate.leaderboard.cleanup.LeaderboardCleanup;
+import de.timmi6790.mineplexleaderboardupdate.cleanup.LeaderboardCleanup;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.bedrock.LeaderboardUpdateBedrock;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java.LeaderboardUpdateJava;
 import de.timmi6790.mineplexleaderboardupdate.utilities.FileUtilities;
@@ -17,11 +17,17 @@ import java.util.concurrent.Executors;
 
 public class MineplexLeaderboardUpdate {
     private static final String VERSION = "3.0.2";
+    @Getter
+    private static final MineplexLeaderboardUpdate instance = new MineplexLeaderboardUpdate();
 
     @Getter
-    private static SentryClient sentry;
+    private SentryClient sentry;
 
     public static void main(final String[] args) {
+        instance.start();
+    }
+
+    private Config getConfig() {
         final Path basePath = Paths.get(".").toAbsolutePath().normalize();
         final Path configPath = Paths.get(basePath + "/config.json");
 
@@ -41,9 +47,14 @@ public class MineplexLeaderboardUpdate {
             System.exit(1);
         }
 
+        return config;
+    }
+
+    public void start() {
+        final Config config = this.getConfig();
         if (!config.getSentryDns().isEmpty()) {
-            sentry = SentryClientFactory.sentryClient(config.getSentryDns());
-            sentry.setRelease(VERSION);
+            this.sentry = SentryClientFactory.sentryClient(config.getSentryDns());
+            this.sentry.setRelease(VERSION);
         }
 
         final Jdbi database = Jdbi.create(config.getDatabase().getUrl(), config.getDatabase().getName(), config.getDatabase().getPassword());

@@ -2,38 +2,39 @@ package de.timmi6790.mineplexleaderboardupdate.utilities;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.NonNull;
 import lombok.SneakyThrows;
+import lombok.experimental.UtilityClass;
 import org.tinylog.Logger;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
+/**
+ * File utilities.
+ */
+@UtilityClass
 public class FileUtilities {
     @Getter
-    private static final Gson gson = new GsonBuilder()
+    private final Gson gson = new GsonBuilder()
             .enableComplexMapKeySerialization()
             .serializeNulls()
             .setPrettyPrinting()
             .create();
 
-    public static <T> boolean saveToJsonIfChanged(final Path path, final T oldVersion, final T newVersion) {
-        if (oldVersion.equals(newVersion)) {
-            return false;
-        }
-
-        saveToJson(path, newVersion);
-        return true;
-    }
-
-    public static <T> void saveToJson(final Path path, final T object) {
+    /**
+     * Saves the object to the path in json format.
+     *
+     * @param <T>    the type parameter
+     * @param path   the path
+     * @param object the object
+     */
+    public <T> void saveToJson(@NonNull final Path path, @NonNull final T object) {
         try {
             Files.write(path, Collections.singleton(gson.toJson(object)));
         } catch (final IOException e) {
@@ -41,9 +42,17 @@ public class FileUtilities {
         }
     }
 
+    /**
+     * Reads the path as json;
+     *
+     * @param <T>   the type parameter
+     * @param path  the path
+     * @param clazz the clazz of the json file
+     * @return the parsed object
+     */
     @SneakyThrows
-    public static <T> T readJsonFile(final Path path, final Class<T> clazz) {
-        final BufferedReader bufferedReader = new BufferedReader(new FileReader(path.toString()));
+    public <T> T readJsonFile(@NonNull final Path path, @NonNull final Class<T> clazz) {
+        final BufferedReader bufferedReader = Files.newBufferedReader(path, StandardCharsets.UTF_8);
         return FileUtilities.getGson().fromJson(bufferedReader, clazz);
     }
 }

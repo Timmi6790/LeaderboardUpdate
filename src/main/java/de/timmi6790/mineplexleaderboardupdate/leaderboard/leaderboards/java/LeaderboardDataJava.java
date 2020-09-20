@@ -1,5 +1,6 @@
 package de.timmi6790.mineplexleaderboardupdate.leaderboard.leaderboards.java;
 
+import de.timmi6790.mineplexleaderboardupdate.MapBuilder;
 import de.timmi6790.mineplexleaderboardupdate.leaderboard.LeaderboardData;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -10,6 +11,7 @@ import org.jdbi.v3.core.statement.StatementContext;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 
 @Getter
 @EqualsAndHashCode(callSuper = true)
@@ -25,6 +27,26 @@ public class LeaderboardDataJava extends LeaderboardData {
 
         this.stat = stat;
         this.board = board;
+    }
+
+    @Override
+    public Map<String, Object> getNewWebLeaderboardParameters() {
+        return MapBuilder.<String, Object>ofHashMap(3)
+                .put("game", this.getWebsiteName())
+                .put("type", this.getStat())
+                .put("boardType", this.getBoard())
+                .build();
+    }
+
+    @Override
+    public String getLogInfo() {
+        return String.format(
+                "%s-%s-%s-%s",
+                this.getWebsiteName(),
+                this.getStat(),
+                this.getBoard(),
+                this.getDatabaseId()
+        );
     }
 
     public static class DatabaseMapper implements RowMapper<LeaderboardDataJava> {

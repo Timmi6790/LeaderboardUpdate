@@ -5,6 +5,7 @@ import kong.unirest.HttpResponse;
 import kong.unirest.Unirest;
 import lombok.Data;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.PreparedBatch;
 import org.tinylog.Logger;
 
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 @Data
-public abstract class AbstractLeaderboardUpdate<T extends LeaderboardData, D extends Leaderboard> {
+public abstract class AbstractLeaderboardUpdate<D extends LeaderboardData, L extends Leaderboard> {
     private static final int UPDATE_THREADS = 1;
     private static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36";
 
@@ -24,44 +25,22 @@ public abstract class AbstractLeaderboardUpdate<T extends LeaderboardData, D ext
     private final String leaderboardBaseUrl;
     private final Jdbi database;
 
-    public abstract List<T> getBoardsInNeedOfUpdate();
+    private final String sqlUpdateLastCheckQuery;
+    private final String sqlInsertNewIdQuery;
+    private final String sqlBoardsInNeedOfUpdateQuery;
+    private final String sqlInsertNewDataQuery;
 
-    protected abstract List<D> getLastSavedLeaderboard(LeaderboardData leaderboardData);
+    public abstract List<D> getBoardsInNeedOfUpdate();
 
-    protected abstract List<D> parseWebLeaderboard(HttpResponse<String> response);
+    protected abstract List<L> getLastSavedLeaderboard(LeaderboardData leaderboardData);
 
-    public abstract void update(final LeaderboardData leaderboardInfo);
+    protected abstract List<L> parseWebLeaderboard(String response);
 
-    public void start() {
-        Logger.info("Start {}", this.leaderboardType);
+    public abstract void updatePlayerNames(final D leaderboardInfo, final List<L> leaderboard);
 
-        final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(UPDATE_THREADS);
-        Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(() -> {
-            final List<T> boards = this.getBoardsInNeedOfUpdate();
-            final CountDownLatch countDownLatch = new CountDownLatch(boards.size());
-            for (final T leaderboardData : boards) {
-                executor.submit(() -> {
-                    try {
-                        Logger.debug("[{}] update run for {}", this.leaderboardType, leaderboardData);
-                        this.update(leaderboardData);
-                    } catch (final Exception e) {
-                        Logger.error("[{}] {}", this.getLeaderboardType(), e);
-                        MineplexLeaderboardUpdate.getSentry().sendException(e);
-                    } finally {
-                        countDownLatch.countDown();
-                    }
-                });
-            }
+    public abstract Map<String, Object> parseLeaderboardForInsert(L leaderboard, long insertId);
 
-            try {
-                countDownLatch.await(1, TimeUnit.HOURS);
-            } catch (final InterruptedException ignore) {
-            }
-
-        }, 0, 5, TimeUnit.MINUTES);
-    }
-
-    public Optional<List<D>> getWebLeaderboard(final Map<String, Object> parameters) {
+    public Optional<String> getWebResponse(final Map<String, Object> parameters) {
         final HttpResponse<String> response;
         try {
             response = Unirest.get(this.leaderboardBaseUrl)
@@ -80,10 +59,91 @@ public abstract class AbstractLeaderboardUpdate<T extends LeaderboardData, D ext
             return Optional.empty();
         }
 
-        return Optional.of(this.parseWebLeaderboard(response)).filter(list -> !list.isEmpty());
+        return Optional.of(response.getBody());
     }
 
-    protected Optional<List<D>> getNewWebLeaderboard(final Map<String, Object> parameters, final LeaderboardData leaderboardData) {
+    public Optional<List<L>> getWebLeaderboard(final Map<String, Object> parameters) {
+        final Optional<String> webResponse = this.getWebResponse(parameters);
+        return webResponse.flatMap(response -> Optional.of(this.parseWebLeaderboard(response)).filter(list -> !list.isEmpty()));
+
+    }
+
+    private Optional<List<L>> getNewWebLeaderboard(final Map<String, Object> parameters, final LeaderboardData leaderboardData) {
         return this.getWebLeaderboard(parameters).filter(leaderboard -> !leaderboard.equals(this.getLastSavedLeaderboard(leaderboardData)));
+    }
+
+    public void update(final D leaderboardData) {
+        Logger.debug("[{}] update run for {}", this.leaderboardType, leaderboardData);
+
+        // Update the last update time
+        this.getDatabase().useHandle(handle ->
+                handle.createUpdate(this.getSqlUpdateLastCheckQuery())
+                        .bind("leaderboardId", leaderboardData.getDatabaseId())
+                        .execute()
+        );
+
+        // Get new leaderboard from website
+        final Optional<List<L>> leaderboardOpt = this.getNewWebLeaderboard(
+                leaderboardData.getNewWebLeaderboardParameters(),
+                leaderboardData
+        );
+
+        if (!leaderboardOpt.isPresent()) {
+            // No data found
+            return;
+        }
+
+        Logger.info("[{}] Updating ", this.getLeaderboardType(), leaderboardData.getLogInfo());
+        final List<L> leaderboard = leaderboardOpt.get();
+
+        this.updatePlayerNames(leaderboardData, leaderboard);
+        this.getDatabase().useHandle(handle -> {
+            // Insert new leaderboard save point
+            final long insertId = handle.createUpdate(this.getSqlInsertNewIdQuery())
+                    .bind("leaderboardId", leaderboardData.getDatabaseId())
+                    .executeAndReturnGeneratedKeys()
+                    .mapTo(long.class)
+                    .first();
+
+            Logger.info("[{}] Insert new {} with {}",
+                    this.getLeaderboardType(),
+                    leaderboardData.getLogInfo(),
+                    insertId
+            );
+
+            // Insert new data
+            final PreparedBatch leaderboardInsert = handle.prepareBatch(this.getSqlInsertNewDataQuery());
+            leaderboard.forEach(leaderboardEntry -> leaderboardInsert.add(this.parseLeaderboardForInsert(leaderboardEntry, insertId)));
+            leaderboardInsert.execute();
+        });
+    }
+
+    public void start() {
+        Logger.info("Start {}", this.leaderboardType);
+
+        final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(UPDATE_THREADS);
+        Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(() -> {
+            final List<D> boards = this.getBoardsInNeedOfUpdate();
+
+            final CountDownLatch countDownLatch = new CountDownLatch(boards.size());
+            for (final D leaderboardData : boards) {
+                executor.submit(() -> {
+                    try {
+                        this.update(leaderboardData);
+                    } catch (final Exception e) {
+                        Logger.error("[{}] {}", this.getLeaderboardType(), e);
+                        MineplexLeaderboardUpdate.getInstance().getSentry().sendException(e);
+                    } finally {
+                        countDownLatch.countDown();
+                    }
+                });
+            }
+
+            try {
+                countDownLatch.await(1, TimeUnit.HOURS);
+            } catch (final InterruptedException ignore) {
+            }
+
+        }, 0, 5, TimeUnit.MINUTES);
     }
 }

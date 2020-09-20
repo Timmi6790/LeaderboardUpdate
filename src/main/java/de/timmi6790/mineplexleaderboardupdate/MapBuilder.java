@@ -8,12 +8,12 @@ import java.util.function.Supplier;
 public class MapBuilder<K, V> {
     private final Map<K, V> map;
 
-    public static <K, V> MapBuilder<K, V> ofHashMap(final int size) {
-        return new MapBuilder<>(() -> new HashMap<>(size));
-    }
-
     public MapBuilder(final Supplier<Map<K, V>> mapFactory) {
         this.map = mapFactory.get();
+    }
+
+    public static <K, V> MapBuilder<K, V> ofHashMap(final int size) {
+        return new MapBuilder<>(() -> new HashMap<>(size));
     }
 
     public MapBuilder<K, V> put(final K key, final V value) {

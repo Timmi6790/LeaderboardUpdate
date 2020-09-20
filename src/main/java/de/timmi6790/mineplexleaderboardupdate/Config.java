@@ -4,9 +4,9 @@ import lombok.Data;
 
 @Data
 public class Config {
-    private String sentryDns = "";
     private final Database database = new Database();
     private final LeaderboardUrls leaderboardUrls = new LeaderboardUrls();
+    private String sentryDns = "";
 
     @Data
     public static class Database {

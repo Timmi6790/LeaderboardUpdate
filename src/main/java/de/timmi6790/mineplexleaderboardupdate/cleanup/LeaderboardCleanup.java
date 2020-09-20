@@ -1,4 +1,4 @@
-package de.timmi6790.mineplexleaderboardupdate.leaderboard.cleanup;
+package de.timmi6790.mineplexleaderboardupdate.cleanup;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.PreparedBatch;
